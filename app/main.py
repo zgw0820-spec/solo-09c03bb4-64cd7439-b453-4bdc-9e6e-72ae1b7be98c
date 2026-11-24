@@ -17,6 +17,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field, field_validator
 
 from .solver import BaselineFailure, MAX_CANDIDATES, solve
+from .staging import StagingError
 from .values_tools import load_values
 
 app = FastAPI(
@@ -149,6 +150,7 @@ def health() -> dict[str, str]:
         },
         400: {"description": "Invalid request / unreadable values file"},
         422: {"description": "Baseline helm template failed for a version"},
+        500: {"description": "On-disk staging read/write failure; no cleanup result returned"},
     },
 )
 def solve_endpoint(
@@ -179,6 +181,10 @@ def solve_endpoint(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except StagingError as exc:
+        # Staging I/O is part of the service internals; a failure means no
+        # trustworthy cleanup result can be produced.
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     payload = SolveResponse(
         cleaned_yaml=result.cleaned_yaml,

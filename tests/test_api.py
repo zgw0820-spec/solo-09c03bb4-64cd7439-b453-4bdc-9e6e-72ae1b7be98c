@@ -93,3 +93,16 @@ def test_duplicate_labels_rejected():
     payload["versions"][1]["label"] = "production-v1"
     resp = client.post("/api/v1/solve", json=payload)
     assert resp.status_code == 422
+
+
+def test_staging_failure_returns_500(monkeypatch):
+    from app import staging as staging_module
+    from app.staging import StagingError
+
+    def _boom(self, name, content):
+        raise StagingError("simulated staging failure")
+
+    monkeypatch.setattr(staging_module.Staging, "write_text", _boom)
+    resp = client.post("/api/v1/solve", json=_payload("orders-api"))
+    assert resp.status_code == 500
+    assert "simulated staging failure" in resp.json()["detail"]
